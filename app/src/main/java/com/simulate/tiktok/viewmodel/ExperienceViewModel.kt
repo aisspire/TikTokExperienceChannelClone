@@ -2,111 +2,150 @@ package com.simulate.tiktok.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.simulate.tiktok.data.AppConfig
+import com.simulate.tiktok.data.ImageSourceType
+import com.simulate.tiktok.data.VideoRepository
 import com.simulate.tiktok.model.VideoItem
 import com.simulate.tiktok.model.getMockData
 import kotlinx.coroutines.delay
-
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
+/**
+ * 经验频道的 ViewModel
+ * 负责管理界面状态（UI State）和业务逻辑。
+ *
+ * 继承自 ViewModel，因此它的生命周期比 Activity/Fragment 长，
+ * 能够处理配置变更（如屏幕旋转）导致的数据保持问题。
+ */
 class ExperienceViewModel : ViewModel() {
+    // 引入 Repository
+    private val repository = VideoRepository()
 
-    // _uiState 是我们内部修改的数据流
+    // --- UI 状态定义 (StateFlow) ---
+    // 使用 StateFlow 是 Compose 中管理状态的推荐方式。
+    // MutableStateFlow 用于内部修改，asStateFlow() 暴露给 UI 层只读访问，保证数据单向流动安全性。
+
+    // 1. 视频列表数据流
     private val _videoList = MutableStateFlow<List<VideoItem>>(emptyList())
-
-    // uiState 是暴露给界面观察的（只读），界面一看到它变了，就会自动刷新
     val videoList: StateFlow<List<VideoItem>> = _videoList.asStateFlow()
 
-    // 状态：是否正在下拉刷新
+    // 2. 下拉刷新状态流 (true 表示正在刷新)
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing = _isRefreshing.asStateFlow()
 
-    // 状态：是否正在上拉加载更多
+    // 3. 上拉加载更多状态流 (true 表示正在加载下一页)
     private val _isLoadingMore = MutableStateFlow(false)
     val isLoadingMore = _isLoadingMore.asStateFlow()
 
+    // 4. 布局模式状态流 (false: 双列瀑布流, true: 单列大图流)
     private val _isSingleColumn = MutableStateFlow(false)
     val isSingleColumn = _isSingleColumn.asStateFlow()
+    // 当前页码记录
+    private var currentPage = 0
+    private val pageSize = 20
+
+    // 初始化块：ViewModel 创建时立即加载第一页数据
     init {
-        // 初始化时加载 Mock 数据
-        loadData()
+        //println("DEBUG: ViewModel init called")
+        refresh()
     }
+
+
+
+    // --- 业务逻辑方法 ---
+
+    /**
+     * 切换列表布局模式 (单列 <-> 双列)
+     * 这是一个简单的状态取反操作。
+     */
     fun toggleLayout() {
         _isSingleColumn.value = !_isSingleColumn.value
     }
 
-    // 初始加载 (复用刷新的逻辑)
+    /**
+     * 初始加载数据，本质上复用了刷新逻辑
+     */
     private fun loadData() {
         refresh()
     }
 
-    // 1. 下拉刷新逻辑
+    /**
+     * 循环切换图片源
+     * PICSUM -> PLACEHOLD -> KITTEN -> ROBOT -> PICSUM ...
+     */
+    fun switchImageSource() {
+        // 1. 获取所有可用的源
+        val sources = ImageSourceType.values()
+
+        // 2. 获取当前源的索引
+        val currentIndex = sources.indexOf(AppConfig.currentImageSource)
+
+        // 3. 计算下一个索引 (取模运算实现循环)
+        val nextIndex = (currentIndex + 1) % sources.size
+
+        // 4. 更新配置
+        AppConfig.currentImageSource = sources[nextIndex]
+
+        // 5. 立即刷新列表以显示新图片
+        refresh()
+    }
+
+    /**
+     * 下拉刷新逻辑
+     * 清空当前列表或重新获取第一页数据。
+     */
     fun refresh() {
+        //if (_isRefreshing.value) return
+        // 使用 viewModelScope 启动协程。
+        // 当 ViewModel 被销毁时，这个协程会自动取消，防止内存泄漏。
         viewModelScope.launch {
-            _isRefreshing.value = true
-            // 模拟网络延迟 1.5秒
-            delay(1500)
-            // 重新生成新的 Mock 数据 (模拟获取了最新内容)
-            _videoList.value = getMockData()
-            _isRefreshing.value = false
+            _isRefreshing.value = true// 标记开始刷新，UI 会显示 Loading 指示器
+            currentPage = 0 // 重置页码
+            // 调用仓库获取数据
+            val newData = repository.fetchVideos(currentPage, pageSize)
+            _videoList.value = newData
+            _isRefreshing.value = false //标记刷新结束，隐藏 Loading 指示器
         }
     }
 
-    // 2. 上拉加载更多逻辑
+    /**
+     * 上拉加载更多逻辑 (无限滚动)
+     */
     fun loadMore() {
-        // 如果已经在加载中，或者正在刷新，就不要重复触发
+        // 防抖/节流检查：
+        // 如果正在加载更多，或者正在下拉刷新中，则忽略这次请求，防止重复请求和数据错乱。
         if (_isLoadingMore.value || _isRefreshing.value) return
 
         viewModelScope.launch {
-            _isLoadingMore.value = true
-            // 模拟网络延迟 1秒
-            delay(1000)
+            _isLoadingMore.value = true// 标记开始加载更多，UI 底部显示 Loading 条
 
-            // 生成下一页数据 (模拟 10 条新数据)
-            val currentList = _videoList.value
-            val startId = currentList.size
-            val newItems = List(10) { index ->
-                val realIndex = startId + index
-                VideoItem(
-                    id = realIndex,
-                    title = "加载更多的数据 - 编号 $realIndex",
-                    imageUrl = "https://picsum.photos/id/${(realIndex + 10) % 100}/400/${(400 + (realIndex % 5) * 50)}",
-                    avatarUrl = "https://picsum.photos/id/${(realIndex + 50) % 100}/100/100",
-                    userName = "新用户$realIndex",
-                    likeCount = "${(100..500).random()}",
-                    isLiked = false,
-                    aspectRatio = 0.7f + (realIndex % 5) * 0.1f
-                )
-            }
+            currentPage++ // 页码 +1
 
-            // 将新数据追加到旧数据后面
+            // 调用仓库获取下一页
+            val newItems = repository.fetchVideos(currentPage, pageSize)
+            // 使用 update 线程安全地更新列表：旧列表 + 新列表
             _videoList.update { it + newItems }
-            _isLoadingMore.value = false
+            _isLoadingMore.value = false// 标记加载结束
         }
     }
 
 
-    // 处理点赞逻辑
+    /**
+     * 点赞/取消点赞逻辑
+     *
+     * @param itemId 被点击的视频 ID
+     */
     fun toggleLike(itemId: Int) {
-        _videoList.update { currentList ->
-            currentList.map { item ->
-                if (item.id == itemId) {
-                    // 找到被点击的卡片，复制一份并修改状态
-                    val newIsLiked = !item.isLiked
-                    // 简单的数字处理：如果是数字字符串，尝试转Int加减，防呆处理
-                    val currentCount = item.likeCount.toIntOrNull() ?: 0
-                    val newCount = if (newIsLiked) currentCount + 1 else currentCount - 1
-
-                    item.copy(
-                        isLiked = newIsLiked,
-                        likeCount = newCount.toString()
-                    )
-                } else {
-                    item // 其他卡片保持不变
-                }
+        _videoList.update { list ->
+            list.map {
+                if (it.id == itemId) {
+                    val newLike = !it.isLiked
+                    val count = it.likeCount.toIntOrNull() ?: 0
+                    it.copy(isLiked = newLike, likeCount = (if(newLike) count + 1 else count - 1).toString())
+                } else it
             }
         }
     }

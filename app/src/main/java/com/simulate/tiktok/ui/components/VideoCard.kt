@@ -18,49 +18,59 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.simulate.tiktok.model.VideoItem
 import androidx.compose.foundation.clickable
+
+/**
+ * 单个卡片组件
+ *
+ * @param item 卡片展示的数据实体对象
+ * @param onLikeClick 当用户点击点赞区域时的回调函数。只通知
+ *
+ */
 @Composable
 fun VideoCard(item: VideoItem,
               onLikeClick: () -> Unit) {
+    // 外层容器：使用 Material3 的 Card 组件
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .wrapContentHeight(), // 高度自适应
-        shape = RoundedCornerShape(8.dp), // 圆角
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)) // 深色背景
+            .fillMaxWidth()//填满列
+            .wrapContentHeight(),//高度自适应
+        shape = RoundedCornerShape(8.dp),//圆角
+        //深灰色背景，模拟暗色体验
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
     ) {
+        //垂直布局
         Column {
-            // 1. 封面图区域
+            //1.封面大图，使用Coil异步加载
             AsyncImage(
-                model = item.imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
+                model = item.imageUrl,//图片
+                contentDescription = null,//描述
+                contentScale = ContentScale.Crop,//裁剪模式：保持比例充满宽度，多余高度裁剪
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 核心：根据数据动态设置图片高度比例，实现瀑布流错落感
+                    // 关键属性：动态设置图片的宽高比。
+                    // 这让瀑布流能正确计算每个 Item 的高度，并在图片加载前预占位置，
+                    // 防止图片加载出来后布局发生跳动 (Layout Shift)。
                     .aspectRatio(item.aspectRatio)
             )
-
-            // 2. 文字信息区域
+            //2.底部文字信息
             Column(modifier = Modifier.padding(8.dp)) {
-                // 标题
+                //标题
                 Text(
                     text = item.title,
                     color = Color.White,
                     fontSize = 14.sp,
                     maxLines = 2, // 最多两行
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 18.sp
+                    overflow = TextOverflow.Ellipsis,//超出显示省略号
+                    lineHeight = 18.sp//设置行高
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
-                // 底部栏：用户信息 + 点赞
+                //底部栏，左侧用户信息，右侧点赞信息
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.SpaceBetween,//两端对齐
+                    verticalAlignment = Alignment.CenterVertically//垂直居中
                 ) {
-                    // 左侧：头像 + 用户名
+                    //左侧 头像+昵称
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(
                             model = item.avatarUrl,
@@ -75,23 +85,26 @@ fun VideoCard(item: VideoItem,
                             text = item.userName,
                             color = Color.Gray,
                             fontSize = 11.sp,
-                            maxLines = 1
+                            maxLines = 1//昵称限制一行
                         )
                     }
-
-                    // 右侧：点赞图标 + 数量
+                    //右侧 点赞图标+数量
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clickable { onLikeClick() } // 点击触发回调
-                            .padding(4.dp) // 增加一点点击区域，提升体验
+                            // 点击事件绑定在这个 Row 上，而不是仅绑定在 Icon 上。
+                            // 这样增加了可点击区域（Touch Target），提升用户体验。
+                            .clickable { onLikeClick() }
+                            .padding(4.dp)
                     ) {
+                        // 根据 isLiked 状态动态切换图标和颜色
                         Icon(
+                            // 已点赞显示实心爱心，未点赞显示空心边框
                             imageVector = if (item.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             contentDescription = "Like",
-                            // 动态颜色：点赞变红，未点赞灰色
+                            // 已点赞显示红色，未点赞显示灰色
                             tint = if (item.isLiked) Color(0xFFFF2C55) else Color.Gray,
-                            modifier = Modifier.size(16.dp) // 图标稍微调大一点点
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
