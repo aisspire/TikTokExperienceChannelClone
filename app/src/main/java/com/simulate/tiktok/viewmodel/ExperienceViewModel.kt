@@ -65,12 +65,7 @@ class ExperienceViewModel : ViewModel() {
         _isSingleColumn.value = !_isSingleColumn.value
     }
 
-    /**
-     * 初始加载数据，本质上复用了刷新逻辑
-     */
-    private fun loadData() {
-        refresh()
-    }
+
 
     /**
      * 循环切换图片源
@@ -135,7 +130,6 @@ class ExperienceViewModel : ViewModel() {
 
     /**
      * 点赞/取消点赞逻辑
-     *
      * @param itemId 被点击的视频 ID
      */
     fun toggleLike(itemId: Int) {

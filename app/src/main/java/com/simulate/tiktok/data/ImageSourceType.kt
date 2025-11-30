@@ -1,6 +1,5 @@
 package com.simulate.tiktok.data
 
-import com.simulate.tiktok.model.VideoItem
 import kotlin.random.Random
 
 // 1. 定义图片源类型的枚举
@@ -15,7 +14,6 @@ enum class ImageSourceType {
 object AppConfig {
     // 当前使用的图片源
     var currentImageSource: ImageSourceType = ImageSourceType.PICSUM
-
     // 模拟网络延迟 (毫秒)
     var mockNetworkDelay: Long = 1000L
     //随机种子
@@ -24,14 +22,13 @@ object AppConfig {
 
 // 3. 图片生成器工具 (Image Provider Strategy)
 object ImageUrlProvider {
-
     fun getImageUrl(id: Int, width: Int, height: Int): String {
         val uniqueKey = "${id}_${AppConfig.randomSeed}"
         return when (AppConfig.currentImageSource) {
             ImageSourceType.PICSUM ->
-                "https://picsum.photos/id/${(id + 10) % 100}/$width/$height"
+                "https://picsum.photos/id/${(id+Random.nextInt(1, 10) + 10) % 100}/$width/$height"
             ImageSourceType.SEOVX ->
-                "https://cdn.seovx.com/ha/?mom=302&sig=${id}"
+                "https://cdn.seovx.com/ha/?mom=302&sig=${id+Random.nextInt(1, 10)}"
         }
     }
 
